@@ -9,26 +9,31 @@ from collections import defaultdict
 import numpy as np
 import gym
 
-def softmax(x):
-    greatest_x = np.max(x)
-    ex = np.exp(x - greatest_x)
+def softmax(values):
+    """Softmax takes a 1-d array of scalars, and assigns them weights between 0 and 1"""
+    greatest_x = np.max(values)
+    ex = np.exp(values - greatest_x)
     return ex / ex.sum()
 
 def random_policy(state, action_space, q_values):
     """Take a random action from the action space"""
+    # pylint: disable=unused-argument
     return action_space.sample()
 
 def epsilon_greedy_policy(state, action_space, q_values, epsilon=0.7):
+    """Take a uniformly random action with probability epsilon, otherwise take the greedy action"""
     if random.uniform(0.0, 1.0) > epsilon:
         return greedy_policy(state, action_space, q_values)
     else:
         return random.randrange(action_space.n)
 
-def softmax_policy(state, action_space, q_values, inverse_temperature=1.00):
+def softmax_policy(state, action_space, q_values, inverse_temperature=1.0):
+    """Choose from actions, with probabilities softmax(q_values)"""
     sample = random.uniform(0.0, 1.0)
-    action_probs = softmax([q_values[state, action] * inverse_temperature for action in range(action_space.n)])
-    for i, p in enumerate(action_probs):
-        sample -= p
+    action_probs = softmax(
+        [q_values[state, action] * inverse_temperature for action in range(action_space.n)])
+    for i, probability in enumerate(action_probs):
+        sample -= probability
         if sample <= 0.0:
             return i
 
@@ -46,7 +51,7 @@ def greedy_policy(state, action_space, q_values):
 
 def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999):
     """Q Learning from the given exploration policy"""
-    q = defaultdict(lambda: 0.0)
+    q_values = defaultdict(lambda: 0.0)
     total_returns = 0.0
     parameter = 0.01
     parameter_step = (30.0 - parameter) / n_episodes
@@ -60,25 +65,28 @@ def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999):
         while not done:
             # env.render()
             # print(state)
-            action = exploration_policy(state, env.action_space, q, inverse_temperature=parameter)
+            action = exploration_policy(
+                state, env.action_space, q_values, inverse_temperature=parameter)
             # print(action)
             next_state, reward, done, _ = env.step(action)
             total_returns += reward
             # print "received reward ", reward, " by taking action ", action
-            greedy_next_action = greedy_policy(next_state, env.action_space, q)
+            greedy_next_action = greedy_policy(next_state, env.action_space, q_values)
             # update q:
             #   q(s, a) := q(s, a) + alpha * [(reward + gamma * max_{a'} (q(s', a'))) - q(s, a)]
-            initial_q = q[state, action]
-            q[state, action] = (
-                initial_q + alpha * (reward + gamma * q[next_state, greedy_next_action] - initial_q))
+            initial_q = q_values[state, action]
+            q_values[state, action] = (
+                initial_q
+                + alpha * (reward + gamma * q_values[next_state, greedy_next_action] - initial_q))
             state = next_state
 
         parameter += parameter_step
 
         # print()
-    return q
+    return q_values
 
-def execute_policy(env, policy, n_episodes, q):
+def execute_policy(env, policy, n_episodes, q_values):
+    """Perform n_episodes rollouts of the given policy"""
     total_reward = 0.0
     for episode in range(n_episodes):
         if episode % 100 == 0:
@@ -86,21 +94,22 @@ def execute_policy(env, policy, n_episodes, q):
         state = env.reset()
         done = False
         while not done:
-            action = policy(state, env.action_space, q)
+            action = policy(state, env.action_space, q_values)
             # print "taking action ", action, " in state ", state
             state, reward, done, _ = env.step(action)
             total_reward += reward
     return total_reward
 
 def q_to_string(q_values):
-    qlist = sorted(list(q_values.iteritems()))
-    last_s = 0
+    """Create printable version of defaultdict q_values"""
+    q_list = sorted(list(q_values.iteritems()))
+    last_state = 0
     result_strings = []
-    for (s, a), q in qlist:
-        if s != last_s:
+    for (state, action), q_value in q_list:
+        if state != last_state:
             result_strings.append("\n")
-        result_strings.append("{0}:{1:.5e}, ".format((s, a), q))
-        last_s = s
+        result_strings.append("{0}:{1:.5e}, ".format((state, action), q_value))
+        last_state = state
     return "".join(result_strings)
 
 
