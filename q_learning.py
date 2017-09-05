@@ -20,7 +20,7 @@ HFFG
 from __future__ import print_function
 
 import random
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 import numpy as np
 import gym
@@ -33,35 +33,49 @@ def softmax(values):
     return ex / ex.sum()
 
 
-def random_policy(state, action_space, q_values):
-    """Take a random action from the action space"""
+def random_policy(state, action_space, q_values, parameter=0.0):
+    """
+    Take a random action from the action space
+
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: unused
+    """
     # pylint: disable=unused-argument
     return action_space.sample()
 
 
-def epsilon_greedy_policy(state, action_space, q_values, epsilon=0.7):
-    """Take a uniformly random action with probability epsilon, otherwise take the greedy action"""
+def epsilon_greedy_policy(state, action_space, q_values, parameter=0.7):
+    """
+    Take a uniformly random action with probability epsilon, otherwise take the greedy action
+
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: epsilon
+    """
+    epsilon = parameter
     if random.uniform(0.0, 1.0) > epsilon:
         return greedy_policy(state, action_space, q_values)
     else:
         return random.randrange(action_space.n)
 
 
-print_globals = {}
+def softmax_policy(state, action_space, q_values, parameter=1.0):
+    """
+    Choose from actions, with probabilities softmax(q_values)
 
-
-def softmax_policy(state, action_space, q_values, inverse_temperature=1.0):
-    """Choose from actions, with probabilities softmax(q_values)"""
-    global action_probs_global
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: inverse_temperature
+    """
     sample = random.uniform(0.0, 1.0)
+    inverse_temperature = parameter
 
     action_probs = softmax(
         [q_values[state, action] * inverse_temperature for action in range(action_space.n)])
-    print_globals["action_probs"] = action_probs
-    print_globals["q_values'"] = [q_values[state, action] for action in range(action_space.n)]
-    print_globals["inverse_temperature"] = inverse_temperature
-    print_globals["softmax_inputs"] = [q_values[state, action] *
-                                       inverse_temperature for action in range(action_space.n)]
     for i, probability in enumerate(action_probs):
         sample -= probability
         if sample <= 0.0:
@@ -80,9 +94,8 @@ def greedy_policy(state, action_space, q_values):
     return best_action
 
 
-def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999, lambda_=.7):
+def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999, lambda_=0.7):
     """Q Learning from the given exploration policy"""
-    # TODO Can be counter
     q_values = defaultdict(lambda: 0.0)
     total_returns = 0.0
     parameter = 0.01
@@ -94,17 +107,16 @@ def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999, lamb
             total_returns = 0.0
         state = env.reset()
         done = False
-        eligibility = Counter()
+        eligibility = defaultdict(lambda: 0.0)
         while not done:
             action = exploration_policy(
-                state, env.action_space, q_values, inverse_temperature=parameter)
+                state, env.action_space, q_values, parameter=parameter)
             try:
                 next_state, reward, done, _ = env.step(action)
             except Exception as e:
                 env.render()
                 print(state)
                 print(action)
-                print(print_globals)
                 raise e
             total_returns += reward
             eligibility[state] += 1
@@ -118,13 +130,6 @@ def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999, lamb
                 initial_q
                 + alpha * (reward + gamma * q_values[next_state, greedy_next_action]
                            - initial_q) * eligibility[state])
-            if not np.isfinite(q_values[state, action]):
-                env.render()
-                print(state)
-                print(action)
-                print("init q", initial_q)
-                print("eligibility", eligibility[state])
-                raise ValueError("found the inf")
             eligibility[state] *= gamma * lambda_
             state = next_state
 
@@ -166,9 +171,9 @@ def q_to_string(q_values):
 def main():
     """Run the dang thing"""
     env = gym.make('FrozenLake-v0')
-    q = q_learning(env, softmax_policy, 10000)
+    q = q_learning(env, random_policy, 10000)
     print(q_to_string(q))
-    final_reward = execute_policy(env, greedy_policy, 1000, q)
+    final_reward = execute_policy(env, softmax_policy, 1000, q)
     print("observed reward out of 1000 trials: ", final_reward)
 
 if __name__ == "__main__":
