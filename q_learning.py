@@ -171,9 +171,9 @@ def q_to_string(q_values):
 def main():
     """Run the dang thing"""
     env = gym.make('FrozenLake-v0')
-    q = q_learning(env, random_policy, 10000)
+    q = q_learning(env, softmax_policy, 10000)
     print(q_to_string(q))
-    final_reward = execute_policy(env, softmax_policy, 1000, q)
+    final_reward = execute_policy(env, greedy_policy, 1000, q)
     print("observed reward out of 1000 trials: ", final_reward)
 
 if __name__ == "__main__":
