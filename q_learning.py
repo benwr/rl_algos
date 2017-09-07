@@ -19,6 +19,7 @@ HFFG
 """
 from __future__ import print_function
 
+from six import iteritems
 import random
 from collections import defaultdict
 
@@ -157,7 +158,7 @@ def execute_policy(env, policy, n_episodes, q_values):
 
 def q_to_string(q_values):
     """Create printable version of defaultdict q_values"""
-    q_list = sorted(list(q_values.items()))
+    q_list = sorted(list(six.iteritems(q_values.items())))
     last_state = 0
     result_strings = []
     for (state, action), q_value in q_list:

@@ -1,0 +1,3 @@
+six
+gym
+# numpy, don't install with pip
