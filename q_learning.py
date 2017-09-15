@@ -1,13 +1,31 @@
 #!/usr/bin/env python
 
-"""Q Learning Implementation"""
+"""
+Q Learning Implementation
+
+Key for states and actions, should you need it:
+Actions:
+left: 0, down: 1, right: 2, up: 3
+States:
+ 0,  1,  2,  3
+ 4,  5,  6,  7
+ 8,  9, 10, 11
+12, 13, 14, 15
+Corresponding to:
+SFFF
+FHFH
+FFFH
+HFFG
+"""
 from __future__ import print_function
 
+from six import iteritems
 import random
 from collections import defaultdict
 
 import numpy as np
 import gym
+
 
 def softmax(values):
     """Softmax takes a 1-d array of scalars, and assigns them weights between 0 and 1"""
@@ -15,21 +33,48 @@ def softmax(values):
     ex = np.exp(values - greatest_x)
     return ex / ex.sum()
 
-def random_policy(state, action_space, q_values):
-    """Take a random action from the action space"""
+
+def random_policy(state, action_space, q_values, parameter=0.0):
+    """
+    Take a random action from the action space
+
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: unused
+    """
     # pylint: disable=unused-argument
     return action_space.sample()
 
-def epsilon_greedy_policy(state, action_space, q_values, epsilon=0.7):
-    """Take a uniformly random action with probability epsilon, otherwise take the greedy action"""
+
+def epsilon_greedy_policy(state, action_space, q_values, parameter=0.7):
+    """
+    Take a uniformly random action with probability epsilon, otherwise take the greedy action
+
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: epsilon
+    """
+    epsilon = parameter
     if random.uniform(0.0, 1.0) > epsilon:
         return greedy_policy(state, action_space, q_values)
     else:
         return random.randrange(action_space.n)
 
-def softmax_policy(state, action_space, q_values, inverse_temperature=1.0):
-    """Choose from actions, with probabilities softmax(q_values)"""
+
+def softmax_policy(state, action_space, q_values, parameter=1.0):
+    """
+    Choose from actions, with probabilities softmax(q_values)
+
+    state, int
+    action_space, gym.action_space,
+    q_values, array-like: indexed by[state, action], must contain state and action_space.n actions
+    parameter, float: inverse_temperature
+    """
     sample = random.uniform(0.0, 1.0)
+    inverse_temperature = parameter
+
     action_probs = softmax(
         [q_values[state, action] * inverse_temperature for action in range(action_space.n)])
     for i, probability in enumerate(action_probs):
@@ -49,7 +94,8 @@ def greedy_policy(state, action_space, q_values):
             best_action_q = q
     return best_action
 
-def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999):
+
+def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999, lambda_=0.7):
     """Q Learning from the given exploration policy"""
     q_values = defaultdict(lambda: 0.0)
     total_returns = 0.0
@@ -62,28 +108,37 @@ def q_learning(env, exploration_policy, n_episodes, alpha=0.1, gamma=0.999):
             total_returns = 0.0
         state = env.reset()
         done = False
+        eligibility = defaultdict(lambda: 0.0)
         while not done:
-            # env.render()
-            # print(state)
             action = exploration_policy(
-                state, env.action_space, q_values, inverse_temperature=parameter)
-            # print(action)
-            next_state, reward, done, _ = env.step(action)
+                state, env.action_space, q_values, parameter=parameter)
+            try:
+                next_state, reward, done, _ = env.step(action)
+            except Exception as e:
+                env.render()
+                print(state)
+                print(action)
+                raise e
             total_returns += reward
-            # print "received reward ", reward, " by taking action ", action
+            eligibility[state] += 1
+            # print("received reward ", reward, " by taking action ", action)
             greedy_next_action = greedy_policy(next_state, env.action_space, q_values)
             # update q:
-            #   q(s, a) := q(s, a) + alpha * [(reward + gamma * max_{a'} (q(s', a'))) - q(s, a)]
+            #   q(s, a) := \
+            #       q(s, a) + alpha * [(reward + gamma * max_{a'} (q(s', a'))) - q(s, a)] * e(s)
             initial_q = q_values[state, action]
             q_values[state, action] = (
                 initial_q
-                + alpha * (reward + gamma * q_values[next_state, greedy_next_action] - initial_q))
+                + alpha * (reward + gamma * q_values[next_state, greedy_next_action]
+                           - initial_q) * eligibility[state])
+            eligibility[state] *= gamma * lambda_
             state = next_state
 
         parameter += parameter_step
 
         # print()
     return q_values
+
 
 def execute_policy(env, policy, n_episodes, q_values):
     """Perform n_episodes rollouts of the given policy"""
@@ -100,9 +155,10 @@ def execute_policy(env, policy, n_episodes, q_values):
             total_reward += reward
     return total_reward
 
+
 def q_to_string(q_values):
     """Create printable version of defaultdict q_values"""
-    q_list = sorted(list(q_values.iteritems()))
+    q_list = sorted(list(iteritems(q_values)))
     last_state = 0
     result_strings = []
     for (state, action), q_value in q_list:
